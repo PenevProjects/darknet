@@ -111,8 +111,33 @@ class JSON_sender
 
     int _write(int sock, char const*const s, int len)
     {
-        if (len < 1) { len = strlen(s); }
-        return ::send(sock, s, len, 0);
+        if (len < 1) {
+            len = strlen(s);
+        }
+
+        size_t length = len;
+        uint32_t nlength = htonl(length);
+        int res;
+        res = send(sock, (char*)&length, sizeof(uint32_t), 0);
+        if (res == -1)
+        {
+            return -1;
+        }
+        int total = 0;
+        int bytesleft = len;
+        int n;
+
+        while (total < len) {
+            n = ::send(sock, s+total, bytesleft, 0);
+            if (n == -1)
+            {
+                return -1;
+            }
+            total += n;
+            bytesleft -= n;
+        }
+
+        return total;
     }
 
 public:
@@ -203,6 +228,7 @@ public:
         fd_set rread = master;
         struct timeval select_timeout = { 0, 0 };
         struct timeval socket_timeout = { 0, timeout };
+        std::cout << "Current connections: " << rread.fd_count << std::endl;
         if (::select(maxfd + 1, &rread, NULL, NULL, &select_timeout) <= 0)
             return true; // nothing broken, there's just noone listening
 
@@ -213,6 +239,7 @@ public:
         {
             int addrlen = sizeof(SOCKADDR);
             SOCKET s = rread.fd_array[i];    // fd_set on win is an array, while ...
+            
 #else
         for (int s = 0; s <= maxfd; s++)
         {
@@ -262,7 +289,7 @@ public:
                 //sprintf(head, "\r\nContent-Length: %zu\r\n\r\n", outlen);
                 //sprintf(head, "--boundary\r\nContent-Type: application/json\r\nContent-Length: %zu\r\n\r\n", outlen);
                 //_write(s, head, 0);
-                if (!close_all_sockets) _write(s, ", \n", 0);
+                //if (!close_all_sockets) _write(s, ", \n", 0);
                 int n = _write(s, outputbuf, outlen);
                 if (n < (int)outlen)
                 {
